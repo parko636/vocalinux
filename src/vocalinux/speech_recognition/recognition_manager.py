@@ -2506,6 +2506,7 @@ class SpeechRecognitionManager:
         with self._model_lock:
             self.model = None
             self.recognizer = None
+            self._http_session = None
             self._model_initialized = False
 
             try:
@@ -2515,6 +2516,8 @@ class SpeechRecognitionManager:
                     self._init_whisper()
                 elif self.engine == "whisper_cpp":
                     self._init_whispercpp()
+                elif self.engine == "remote_api":
+                    self._init_remote_api()
                 else:
                     logger.error("Cannot reinitialize: unknown engine '%s'", self.engine)
                     return
