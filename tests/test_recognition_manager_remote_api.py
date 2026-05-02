@@ -525,5 +525,40 @@ class TestRemoteAPIReconfiguration(unittest.TestCase):
         self.assertEqual(self.manager.remote_api_endpoint, "/v1/audio/transcriptions")
 
 
+class TestRemoteAPIReinitializeAfterResume(unittest.TestCase):
+    """Test cases for reinitialize_after_resume with remote_api engine."""
+
+    def test_reinitialize_after_resume_calls_init_remote_api(self):
+        """Test that reinitialize_after_resume dispatches to _init_remote_api."""
+        from unittest.mock import patch
+
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+
+        with patch.object(manager, "_init_remote_api") as mock_init:
+            manager.reinitialize_after_resume()
+
+        mock_init.assert_called_once()
+
+    def test_reinitialize_after_resume_without_url_does_not_raise(self):
+        """Test that reinitialize_after_resume with empty URL sets _model_initialized False."""
+        SpeechRecognitionManager = _import_manager()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="",
+        )
+
+        # Should not raise any exception
+        manager.reinitialize_after_resume()
+
+        self.assertFalse(manager._model_initialized)
+
+
 if __name__ == "__main__":
     unittest.main()
