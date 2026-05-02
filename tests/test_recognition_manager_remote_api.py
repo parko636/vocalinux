@@ -58,59 +58,64 @@ def _get_mock_requests():
     return sys.modules["requests"]
 
 
+def _get_mock_session():
+    """Get the mock session instance returned by requests.Session()."""
+    return _get_mock_requests().Session.return_value
+
+
 def _setup_requests_get_ok(status_code=200):
-    """Configure mock requests.get to return a successful response."""
-    mock_requests = _get_mock_requests()
+    """Configure mock session.get to return a successful response."""
+    mock_session = _get_mock_session()
     mock_response = Mock()
     mock_response.ok = True
     mock_response.status_code = status_code
-    mock_requests.get.return_value = mock_response
-    return mock_requests.get
+    mock_session.get.return_value = mock_response
+    return mock_session.get
 
 
 def _setup_requests_get_error(exception):
-    """Configure mock requests.get to throw an exception."""
-    mock_requests = _get_mock_requests()
-    mock_requests.get.side_effect = exception
-    return mock_requests.get
+    """Configure mock session.get to throw an exception."""
+    mock_session = _get_mock_session()
+    mock_session.get.side_effect = exception
+    return mock_session.get
 
 
 def _setup_requests_get_non_ok(status_code=500):
-    """Configure mock requests.get to return a non-successful response."""
-    mock_requests = _get_mock_requests()
+    """Configure mock session.get to return a non-successful response."""
+    mock_session = _get_mock_session()
     mock_response = Mock()
     mock_response.ok = False
     mock_response.status_code = status_code
-    mock_requests.get.return_value = mock_response
-    return mock_requests.get
+    mock_session.get.return_value = mock_response
+    return mock_session.get
 
 
 def _setup_requests_post_ok(json_data, status_code=200):
-    """Configure mock requests.post to return a successful response."""
-    mock_requests = _get_mock_requests()
+    """Configure mock session.post to return a successful response."""
+    mock_session = _get_mock_session()
     mock_response = Mock()
     mock_response.status_code = status_code
     mock_response.json.return_value = json_data
-    mock_requests.post.return_value = mock_response
-    return mock_requests.post
+    mock_session.post.return_value = mock_response
+    return mock_session.post
 
 
 def _setup_requests_post_error(exception):
-    """Configure mock requests.post to throw an exception."""
-    mock_requests = _get_mock_requests()
-    mock_requests.post.side_effect = exception
-    return mock_requests.post
+    """Configure mock session.post to throw an exception."""
+    mock_session = _get_mock_session()
+    mock_session.post.side_effect = exception
+    return mock_session.post
 
 
 def _setup_requests_post_status(status_code, raise_for_status_error=None):
-    """Configure mock requests.post to return a response with a specific status code."""
-    mock_requests = _get_mock_requests()
+    """Configure mock session.post to return a response with a specific status code."""
+    mock_session = _get_mock_session()
     mock_response = Mock()
     mock_response.status_code = status_code
     if raise_for_status_error:
         mock_response.raise_for_status.side_effect = raise_for_status_error
-    mock_requests.post.return_value = mock_response
-    return mock_requests.post
+    mock_session.post.return_value = mock_response
+    return mock_session.post
 
 
 class TestRemoteAPIEngine(unittest.TestCase):
@@ -558,6 +563,96 @@ class TestRemoteAPIReinitializeAfterResume(unittest.TestCase):
         manager.reinitialize_after_resume()
 
         self.assertFalse(manager._model_initialized)
+
+
+class TestHTTPSession(unittest.TestCase):
+    """Test cases for manager-owned requests.Session (connection pooling)."""
+
+    def test_init_remote_api_creates_session(self):
+        """_init_remote_api creates a requests.Session and stores it on _http_session."""
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+
+        mock_requests = _get_mock_requests()
+        mock_requests.Session.assert_called()
+        self.assertIs(manager._http_session, mock_requests.Session.return_value)
+
+    def test_transcribe_uses_session_post(self):
+        """_try_whispercpp_server_api calls self._http_session.post, not module-level requests.post."""
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+            remote_api_endpoint="/inference",
+        )
+
+        mock_session = _get_mock_session()
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"text": "hello"}
+        mock_session.post.return_value = mock_response
+
+        result = manager._try_whispercpp_server_api(b"wav-bytes", "en", {})
+
+        self.assertEqual(result, "hello")
+        mock_session.post.assert_called_once()
+        # Module-level requests.post must NOT have been called
+        self.assertFalse(_get_mock_requests().post.called)
+
+    def test_reconfigure_away_from_remote_api_closes_session(self):
+        """reconfigure(engine='vosk') from remote_api calls session.close() and nulls _http_session."""
+        from unittest.mock import patch
+
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+
+        session = manager._http_session
+
+        with patch.object(manager, "_init_vosk"):
+            manager.reconfigure(engine="vosk")
+
+        session.close.assert_called_once()
+        self.assertIsNone(manager._http_session)
+
+    def test_reinit_closes_previous_session_before_creating_new(self):
+        """A second _init_remote_api call closes the previous session before creating a new one."""
+        from unittest.mock import MagicMock
+
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        # Give Session() distinct return values for each call so we can track them
+        mock_requests = _get_mock_requests()
+        first_session = MagicMock(name="session1")
+        second_session = MagicMock(name="session2")
+        first_session.get.return_value = Mock(ok=True, status_code=200)
+        second_session.get.return_value = Mock(ok=True, status_code=200)
+        mock_requests.Session.side_effect = [first_session, second_session]
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+
+        self.assertIs(manager._http_session, first_session)
+
+        # Call _init_remote_api a second time (simulates back-to-back inits)
+        manager._init_remote_api()
+
+        first_session.close.assert_called_once()
+        self.assertIs(manager._http_session, second_session)
 
 
 if __name__ == "__main__":
