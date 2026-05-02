@@ -559,6 +559,7 @@ class SpeechRecognitionManager:
         self.remote_api_url = kwargs.get("remote_api_url", "")
         self.remote_api_key = kwargs.get("remote_api_key", "")
         self.remote_api_endpoint = kwargs.get("remote_api_endpoint", "/inference")
+        self._http_session = None
 
         # Audio diagnostics tracking
         self._last_audio_level = 0.0
@@ -1067,16 +1068,21 @@ class SpeechRecognitionManager:
 
         logger.info(f"Initialize remote API engine, server: {self.remote_api_url}")
 
+        # Replace any existing session (prevents leak on back-to-back inits)
+        import requests
+
+        if self._http_session:
+            self._http_session.close()
+        self._http_session = requests.Session()
+
         # Try connection test
         try:
-            import requests
-
             test_url = self.remote_api_url
             headers = {}
             if self.remote_api_key:
                 headers["Authorization"] = f"Bearer {self.remote_api_key}"
 
-            response = requests.get(test_url, headers=headers, timeout=5)
+            response = self._http_session.get(test_url, headers=headers, timeout=5)
             if response.ok:
                 logger.info(
                     f"Remote server connection test successful (status={response.status_code})"
@@ -1114,8 +1120,6 @@ class SpeechRecognitionManager:
         import wave
 
         try:
-            import requests
-
             if not audio_buffer:
                 return ""
 
@@ -1217,7 +1221,7 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
+            response = self._http_session.post(url, headers=headers, files=files, data=data, timeout=30)
 
             if response.status_code == 404:
                 logger.debug("OpenAI API endpoint does not exist, try other formats")
@@ -1261,7 +1265,7 @@ class SpeechRecognitionManager:
             data["language"] = lang
 
         try:
-            response = requests.post(url, headers=headers, files=files, data=data, timeout=30)
+            response = self._http_session.post(url, headers=headers, files=files, data=data, timeout=30)
 
             if response.status_code == 404:
                 logger.debug("whisper.cpp server endpoint does not exist")
@@ -2312,6 +2316,7 @@ class SpeechRecognitionManager:
         )
 
         restart_needed = False
+        old_engine = self.engine
         if engine is not None and engine != self.engine:
             self.engine = engine
             restart_needed = True
@@ -2378,6 +2383,10 @@ class SpeechRecognitionManager:
                 # Release old resources explicitly if necessary (Python's GC might handle it)
                 self.model = None
                 self.recognizer = None
+                if old_engine == "remote_api" and self.engine != "remote_api":
+                    if self._http_session is not None:
+                        self._http_session.close()
+                    self._http_session = None
                 try:
                     if self.engine == "vosk":
                         self._init_vosk()
