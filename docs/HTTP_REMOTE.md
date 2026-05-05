@@ -64,15 +64,17 @@ The endpoint is `/v1/audio/transcriptions`.
 
 ### Via the Settings dialog
 
-1. Launch Vocalinux and open **Settings → Speech Recognition**.
-2. Set **Engine** to **Remote API**.
-3. In **Remote Server Settings**:
+The remote engine is a power-user override and lives on the **Advanced** tab so casual users aren't confronted with it.
+
+1. Launch Vocalinux and open **Settings → Advanced → Remote Server**.
+2. Toggle **Use remote server** on. This overrides whatever local engine is selected on the Speech Engine tab.
+3. Fill in the fields:
    - **Server URL**: base URL of the server, e.g. `http://192.168.1.100:8080` (no trailing slash needed; one is stripped automatically).
    - **API Key** (optional): sent as `Authorization: Bearer <key>`. Leave blank if your server doesn't require auth.
    - **API Endpoint**: pick **Whisper.cpp (`/inference`)** or **OpenAI (`/v1/audio/transcriptions`)** to match your server.
 4. Click **Test Connection** — a successful test means the URL is reachable and credentials (if any) are accepted. A failure here is just a warning; Vocalinux will still try again on the first transcription.
 
-Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes.
+Settings auto-save and re-initialise the engine immediately, so you can start dictating as soon as the test passes. Toggling the switch off restores the local engine selected on the Speech Engine tab.
 
 ### Via the config file
 
