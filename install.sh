@@ -2184,17 +2184,9 @@ VOSK_CONFIG
                 }
                 print_success "requests library installed"
 
-                # Ask user for server URL in interactive mode
-                local REMOTE_API_URL=""
-                if [[ "$NON_INTERACTIVE" != "yes" ]]; then
-                    echo ""
-                    print_info "You need a speech recognition server running on your network."
-                    print_info "Supported servers:"
-                    print_info "  • whisper.cpp server: ./server -m model.bin --host 0.0.0.0 --port 8080"
-                    print_info "  • LocalAI, Faster Whisper Server, or any OpenAI-compatible API"
-                    echo ""
-                    read -p "Enter remote server URL (e.g., http://192.168.1.100:8080): " REMOTE_API_URL
-                fi
+                # URL was collected upfront by run_interactive_install
+                # (or left blank in auto/non-interactive mode).
+                local REMOTE_API_URL="${REMOTE_API_URL:-}"
 
                 # Create configuration file
                 local REMOTE_CONFIG_FILE="$CONFIG_DIR/config.json"
