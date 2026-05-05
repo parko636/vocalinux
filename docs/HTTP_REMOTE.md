@@ -9,6 +9,8 @@ Vocalinux speaks two wire formats out of the box:
 
 Pick whichever your server exposes — the rest of this guide applies to both.
 
+> **Tip — share the server with your phone.** Both formats are open standards, so the same self-hosted server can also back mobile dictation apps. On Android, apps like *Dictate* and *Transcribro* speak OpenAI-compatible Whisper; on iOS, Shortcuts-based dictation clients can hit the same endpoint. Run one Whisper server, point your laptop and phone at it, and you get consistent dictation everywhere without uploading audio to a third party.
+
 ## How It Works
 
 When the **Remote API** engine is active, Vocalinux:
@@ -56,6 +58,7 @@ The endpoint is `/v1/audio/transcriptions`.
 - The server must be reachable from the client over HTTP or HTTPS.
 - If you bind to `0.0.0.0`, open the port in your firewall (`ufw allow 8080/tcp`, etc.).
 - For anything outside a trusted LAN, terminate TLS in front of the server (Caddy, nginx, Traefik) and require an API key — the audio you upload is private speech.
+- If you plan to also use the server from a mobile dictation app, terminate TLS even on a LAN — most Android and iOS apps refuse cleartext HTTP regardless of network.
 
 ## Client-Side Setup (Vocalinux)
 
