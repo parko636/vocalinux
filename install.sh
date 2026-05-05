@@ -867,7 +867,7 @@ EOF
     echo "  └─────────────────────────────────────────────────────────────┘"
     echo ""
     echo "  ┌─────────────────────────────────────────────────────────────┐"
-    echo "  │  4. REMOTE API                                               │"
+    echo "  │  4. REMOTE API (ADVANCED)                                    │"
     echo "  │     • Offload processing to a GPU server on your network     │"
     echo "  │     • Ideal for laptops without GPU                          │"
     echo "  │     • Supports whisper.cpp server & OpenAI-compatible APIs    │"

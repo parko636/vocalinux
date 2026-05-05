@@ -1578,6 +1578,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Toggle: enable remote engine (overrides Speech Engine tab selection)
         self.use_remote_switch = Gtk.Switch()
+        self.use_remote_switch.set_active(False)
         self.use_remote_switch.set_tooltip_text(
             "When enabled, transcription is performed by the configured remote "
             "server instead of the local engine selected on the Speech Engine tab."
