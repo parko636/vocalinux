@@ -369,6 +369,17 @@ class TestRemoteAPITranscription(unittest.TestCase):
             # Should pass None for auto detection
             mock_server.assert_called_once_with(ANY, None, ANY)
 
+    def test_transcribe_unexpected_exception_returns_empty(self):
+        """An unexpected exception inside transcription is caught and returns ''."""
+        from unittest.mock import patch
+
+        with patch.object(self.manager, "_try_whispercpp_server_api") as mock_server:
+            mock_server.side_effect = RuntimeError("boom")
+
+            result = self.manager._transcribe_with_remote_api([b"audio"])
+
+            self.assertEqual(result, "")
+
 
 class TestOpenAIAPIFormat(unittest.TestCase):
     """Test cases for OpenAI compatible API format."""
@@ -562,6 +573,32 @@ class TestRemoteAPIReinitializeAfterResume(unittest.TestCase):
         # Should not raise any exception
         manager.reinitialize_after_resume()
 
+        self.assertFalse(manager._model_initialized)
+
+    def test_reinitialize_after_resume_unknown_engine_returns_silently(self):
+        """Unknown engine value short-circuits reinit without raising or dispatching."""
+        from unittest.mock import patch
+
+        SpeechRecognitionManager = _import_manager()
+        _setup_requests_get_ok()
+
+        manager = SpeechRecognitionManager(
+            engine="remote_api",
+            remote_api_url="http://localhost:9090",
+        )
+        manager.engine = "bogus_engine"
+
+        with patch.object(manager, "_init_remote_api") as mock_remote, patch.object(
+            manager, "_init_vosk"
+        ) as mock_vosk, patch.object(manager, "_init_whisper") as mock_whisper, patch.object(
+            manager, "_init_whispercpp"
+        ) as mock_whispercpp:
+            manager.reinitialize_after_resume()
+
+        mock_remote.assert_not_called()
+        mock_vosk.assert_not_called()
+        mock_whisper.assert_not_called()
+        mock_whispercpp.assert_not_called()
         self.assertFalse(manager._model_initialized)
 
 
