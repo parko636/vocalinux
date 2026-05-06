@@ -379,6 +379,14 @@ def _filter_non_speech(text: str) -> str:
     [BLANK_AUDIO], music notes, or other non-speech artifacts when
     transcribing silent or ambiguous audio.
 
+    A trailing newline returned by the upstream transcription service is
+    preserved in the output. Some pipelines (post-processing proxies,
+    fixup layers) emit a meaningful trailing '\\n' to signal that the
+    typed text should be submitted (Enter key); stripping it silently
+    discards that signal. Pattern matching still runs against a
+    whitespace-stripped probe so the existing non-speech checks are
+    unaffected.
+
     Args:
         text: The transcribed text to filter
 
@@ -390,7 +398,8 @@ def _filter_non_speech(text: str) -> str:
     if not text or not text.strip():
         return ""
 
-    text = text.strip()
+    # Probe is used for non-speech-pattern matching only.
+    probe = text.strip()
 
     # Non-speech patterns to filter out
     non_speech_patterns = [
@@ -406,20 +415,24 @@ def _filter_non_speech(text: str) -> str:
     ]
 
     for pattern in non_speech_patterns:
-        if re.match(pattern, text, re.IGNORECASE):
-            logger.debug(f"Filtered non-speech token: '{text}'")
+        if re.match(pattern, probe, re.IGNORECASE):
+            logger.debug(f"Filtered non-speech token: '{probe}'")
             return ""
 
     # Check if text has enough actual speech content
     # At least 30% of characters should be alphanumeric or common speech punctuation
-    speech_chars = sum(1 for c in text if c.isalnum() or c in ".,!?-'\"")
-    total_chars = len(text)
+    speech_chars = sum(1 for c in probe if c.isalnum() or c in ".,!?-'\"")
+    total_chars = len(probe)
 
     if total_chars > 0 and speech_chars / total_chars < 0.3:
-        logger.debug(f"Filtered low-speech-content text: '{text}'")
+        logger.debug(f"Filtered low-speech-content text: '{probe}'")
         return ""
 
-    return text
+    # Strip whitespace as before, but preserve a trailing newline if the
+    # upstream API sent one — it carries an explicit submit/Enter signal
+    # from post-processing proxies.
+    trailing_newline = text.endswith(("\n", "\r"))
+    return probe + "\n" if trailing_newline else probe
 
 
 def _show_notification(title: str, message: str, icon: str = "dialog-warning"):
@@ -1176,8 +1189,11 @@ class SpeechRecognitionManager:
             transcribe_duration = time.time() - transcribe_start
             rtf = transcribe_duration / duration if duration > 0 else 0
 
-            # Filter non-speech content
-            text = _filter_non_speech(text.strip()) if text else ""
+            # Filter non-speech content. Do NOT pre-strip — _filter_non_speech
+            # preserves a trailing '\n' from the upstream API (used by
+            # post-processing proxies to signal Enter), and a pre-strip here
+            # would silently discard it.
+            text = _filter_non_speech(text) if text else ""
 
             if text:
                 logger.info(f"Remote API transcription result: '{text}'")
